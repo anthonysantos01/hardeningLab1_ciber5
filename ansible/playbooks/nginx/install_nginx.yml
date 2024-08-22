@@ -1,0 +1,27 @@
+- hosts: "*"
+  become: yes
+  tasks: 
+  - name: Create Directory
+    ansible.builtin.file: 
+      path: /nginx/src
+      state: directory
+
+  - name: Dependencies
+    apt: 
+        name: 
+        - openssl
+        - pcre2-utils
+        - zlib1g-dev
+        state: present
+
+  - name: Download nginx
+    ansible.builtin.get_url:
+      url: https://nginx.org/download/nginx-1.27.0.tar.gz
+      dest: /nginx/src/
+
+  - name: Extract Nginx 
+    ansible.builtin.unarchive:
+      src: /nginx/src/nginx-1.27.0.tar.gz
+      dest: /nginx/src/
+      remote_src: yes
+
