@@ -1,0 +1,101 @@
+---
+
+- name: Compile NGINX from sources
+  hosts: lab1
+  vars:
+    nginx_version: nginx-1.27.0
+    nginx_tarball_url: "https://nginx.org/download/{{ nginx_version }}.tar.gz"
+    nginx_install_dir: "/tmp/{{ nginx_version }}"
+    nginx_sbin_path: "/usr/sbin/nginx"
+    nginx_conf_path: "/etc/nginx/nginx.conf"
+    nginx_custom_modules: "--with-http_ssl_module --without-http_scgi_module --without-http_gzip_module --without-http_autoindex_module --error-log-path=/var/log/nginx/error.log --pid-path=/etc/nginx/nginx.pid --lock-path=/etc/nginx/nginx.lock --user=nginx --group=nginx --with-threads"
+    ansible_user: "test"
+
+
+  tasks:
+  - name: Creating a User to manage NGINX process
+    become: yes
+    command: "sudo useradd nginx -r -d /var/cache/nginx -s /sbin/nologin"
+    ignore_errors: yes 
+
+  - name: Installing NGINX Dependencies
+    become: yes
+    apt:
+      name: "{{ item }}"
+      update_cache: yes
+    with_items:
+      - libssl-dev
+      - libpcre3
+      - libpcre3-dev
+
+  - name: Downloading NGINX sources
+    get_url:
+      url: "{{ nginx_tarball_url }}"
+      dest: "/tmp/{{ nginx_version }}.tar.gz"
+    register: nginx_source
+
+  - name: Unpacking NGINX
+    unarchive:
+      copy: no
+      dest: /tmp/
+      src: "{{ nginx_source.dest }}"
+    when: nginx_source.changed
+    register: nginx_source_unpack
+
+  - name: Create required Nginx dirs
+    become: yes
+    file:
+      path: /etc/nginx
+      state: directory
+      owner: root
+      mode: 0755
+      
+  - name: Logs dirs
+    become: yes
+    file:
+      path: /var/logs/nginx/
+      state: directory
+      owner: nginx
+      mode: 0644
+
+
+  - name: Configuring NGINX source with custom modules
+    command: "./configure --sbin-path={{ nginx_sbin_path }} --conf-path={{ nginx_conf_path }} {{ nginx_custom_modules }}"
+    args:
+      chdir: "{{ nginx_install_dir }}"
+
+
+  - name: Installing NGINX
+    become: yes
+    shell: make && make install
+    args:
+      chdir: "{{ nginx_install_dir }}"
+    
+
+
+
+  - name: Creating NGINX conf file
+    become: yes
+    template:
+      src: nginx.conf
+      dest: "{{ nginx_conf_path }}"
+      owner: root
+      group: root
+      mode: 0644
+      
+  - name: Creating Nginx Service
+    become: yes
+    template:
+      src: nginx.service
+      dest: /etc/systemd/system/nginx.service
+      owner: nginx
+      group: nginx
+      mode: 0755
+
+  - name: Enable Nginx Service
+    become: yes
+    command: "systemctl enable nginx"
+
+  - name: Starting Nginx Service
+    become: yes
+    command: "systemctl start nginx"
